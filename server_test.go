@@ -1,13 +1,13 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
-	"net/http"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"encoding/json"
-)
 
+	"github.com/ethereum/go-ethereum/ethclient"
+)
 
 func init() {
 	http.Handle("/", Router())
@@ -15,7 +15,7 @@ func init() {
 
 func TestConnection(t *testing.T) {
 	var err error
-	conn, err = ethclient.Dial("https://main.cjx.io")
+	conn, err = ethclient.Dial("https://mainnet.infura.io")
 	if err != nil {
 		t.Fail()
 	}
