@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -185,31 +186,109 @@ func getETHTokensHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type BlockInfo struct {
-	Number uint64 `json:"number"`
-	Data   uint64 `json:"data"`
-}
-
 func getBlockInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// vars := mux.Vars(r)
-	// contract := vars["contract"]
 	blockNumBigInt := new(big.Int)
-	blockNumBigInt.SetInt64(4930986)
-	//blockNumBigInt.
-	blockN, dataInt, err := GetBlockInfo(blockNumBigInt)
-
-	new := BlockInfo{
-		Number: blockN,
-		Data:   dataInt,
+	var allTokens []TokenInfo
+	var i int64
+	var minblock int64 = 4379066
+	var maxblock int64 = 4380066
+	for i = minblock; i <= maxblock; i++ {
+		blockNumBigInt.SetInt64(i)
+		contractAddresses, err := GetContractsAtBlock(blockNumBigInt)
+		if i%50 == 0 {
+			fmt.Printf("%d  %d \n", i, i/maxblock)
+		}
+		if err != nil {
+			// Handle error for GetContractsAtBlock
+			fmt.Printf("Error at block %d", i)
+		} else {
+			for _, contractAddress := range contractAddresses {
+				name, symbol, tokenDecimals, err := GetContractInfo(contractAddress)
+				if err != nil {
+					// Do nothing
+				} else {
+					// Add the token info to the "database"
+					newToken := TokenInfo{
+						Address: contractAddress,
+						Decimal: int(tokenDecimals),
+						Symbol:  symbol,
+						Name:    name,
+					}
+					allTokens = append(allTokens, newToken)
+				}
+			}
+		}
 	}
 
-	j, err := json.Marshal(new)
+	j, err := json.Marshal(allTokens)
 
 	if err == nil {
 		w.Write(j)
 	}
+}
+
+func StartERC20Dump() {
+	blockNumBigInt := new(big.Int)
+	// var allTokens []TokenInfo
+	var i int64
+	var minblock int64 = 4080066
+	var maxblock int64 = 4380066
+	blocksToTraverse := maxblock - minblock
+
+	// For writing to cache
+	os.MkdirAll("./output/", 0700)
+	f, err := os.Create("./output/tokens" + string(minblock) + "-" + string(maxblock) + ".out")
+	if err != nil {
+		fmt.Printf(err.Error())
+		return
+	}
+	// fc, err := os.Create("./block.txt")
+	defer f.Close()
+	// defer fc.Close()
+
+	w := bufio.NewWriter(f)
+	// w2 := bufio.NewWriter(fc)
+
+	w.WriteString("[")
+	for i = minblock; i <= maxblock; i++ {
+		blockNumBigInt.SetInt64(i)
+		contractAddresses, err := GetContractsAtBlock(blockNumBigInt)
+		if i%50 == 0 {
+			fmt.Printf("%d:  %f%% \n", i, 100.0*float64(i-minblock)/float64(blocksToTraverse))
+		}
+		if err != nil {
+			// Handle error for GetContractsAtBlock
+			fmt.Printf("Error at block %d\n", i)
+		} else {
+			for _, contractAddress := range contractAddresses {
+				name, symbol, tokenDecimals, err := GetContractInfo(contractAddress)
+				if err != nil {
+					// Do nothing
+				} else {
+					// Add the token info to the "database"
+					newToken := TokenInfo{
+						Address: contractAddress,
+						Decimal: int(tokenDecimals),
+						Symbol:  symbol,
+						Name:    name,
+					}
+					j, err := json.Marshal(newToken)
+					// allTokens = append(allTokens, newToken)
+					if err == nil {
+						w.Write(j)
+						w.WriteString(",")
+					}
+				}
+			}
+		}
+		// w2.WriteString("%d\n", i)
+		w.Flush()
+		// w2.Flush()
+	}
+	w.WriteString("]")
+	w.Flush()
 }
 
 func StartServer() {

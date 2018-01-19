@@ -31,6 +31,7 @@ func main() {
 		cli.Tree(help),
 		cli.Tree(child),
 		cli.Tree(versionCli),
+		cli.Tree(dump),
 	).Run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -82,6 +83,23 @@ var child = &cli.Command{
 	},
 }
 
+var dump = &cli.Command{
+	Name: "dump",
+	Desc: "dump all ERC20 tokens ever created to a file",
+	Argv: func() interface{} { return new(argT) },
+	Fn: func(ctx *cli.Context) error {
+		argv := ctx.Argv().(*argT)
+		GethLocation = argv.Geth
+		UsePort = argv.Port
+		UseIP = argv.IP
+		ConnectGeth()
+		// StartServer()
+		StartERC20Dump()
+
+		return nil
+	},
+}
+
 var versionCli = &cli.Command{
 	Name: "version",
 	Desc: "get the version of tokenbalance server",
@@ -109,19 +127,18 @@ func ConnectGeth() {
 	}
 }
 
+var debug = false
+
 // Find all contracts created at block
-// func GetBlockInfo(number *big.Int) (uint64, uint64, error) {
 func GetContractsAtBlock(number *big.Int) ([]string, error) {
 	getBlock, err := conn.BlockByNumber(context.Background(), number)
 	if err != nil {
 		log.Println("Failed to get current block number: ", err)
 		return nil, err
 	}
-	blockN := getBlock.NumberU64()
-	// nonce := getBlock.Body().Transactions[0].Nonce()
 
 	block := *getBlock
-	nonce := uint64(len(block.Transactions()))
+	var contractAddresses []string
 	for _, tx := range block.Transactions() {
 		//fmt.Printf(tx.To().String())
 		if tx.To() == nil {
@@ -135,11 +152,16 @@ func GetContractsAtBlock(number *big.Int) ([]string, error) {
 				// No errors
 				fmt.Printf(txReceipt.ContractAddress.String())
 				// Found a deployed contract
+				contractAddresses = append(contractAddresses, txReceipt.ContractAddress.String())
 			}
-			//fmt.Printf(tx.String())
-			fmt.Printf("\n---\n")
+			if debug {
+				fmt.Printf(tx.String())
+				fmt.Printf("\n---\n")
+			}
 		}
 	}
+
+	return contractAddresses, nil
 }
 
 func GetAccount(contract string, wallet string) (string, string, string, uint8, string, uint64, error) {
@@ -209,23 +231,23 @@ func GetContractInfo(contract string) (string, string, uint8, error) {
 
 	token, err := NewTokenCaller(common.HexToAddress(contract), conn)
 	if err != nil {
-		log.Println("Failed to instantiate a Token contract: %v", err)
+		// log.Println("Failed to instantiate a Token contract: %v", err)
 		return "error", "error", 0, err
 	}
 
 	symbol, err := token.Symbol(nil)
 	if err != nil {
-		log.Println("Failed to get symbol from contract: "+contract, err)
+		// log.Println("Failed to get symbol from contract: "+contract, err)
 		return "error", "error", 0, err
 	}
 	tokenDecimals, err := token.Decimals(nil)
 	if err != nil {
-		log.Println("Failed to get decimals from contract: "+contract, err)
+		// log.Println("Failed to get decimals from contract: "+contract, err)
 		return "error", "error", 0, err
 	}
 	name, err := token.Name(nil)
 	if err != nil {
-		log.Println("Failed to retrieve token name from contract: "+contract, err)
+		// log.Println("Failed to retrieve token name from contract: "+contract, err)
 		return "error", "error", 0, err
 	}
 
