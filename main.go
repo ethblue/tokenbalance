@@ -3,13 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
+	"math"
+	"math/big"
+	"os"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/mkideal/cli"
 	"github.com/shopspring/decimal"
-	"log"
-	"math"
-	"os"
 )
 
 var conn *ethclient.Client
@@ -107,6 +109,39 @@ func ConnectGeth() {
 	}
 }
 
+// Find all contracts created at block
+// func GetBlockInfo(number *big.Int) (uint64, uint64, error) {
+func GetContractsAtBlock(number *big.Int) ([]string, error) {
+	getBlock, err := conn.BlockByNumber(context.Background(), number)
+	if err != nil {
+		log.Println("Failed to get current block number: ", err)
+		return nil, err
+	}
+	blockN := getBlock.NumberU64()
+	// nonce := getBlock.Body().Transactions[0].Nonce()
+
+	block := *getBlock
+	nonce := uint64(len(block.Transactions()))
+	for _, tx := range block.Transactions() {
+		//fmt.Printf(tx.To().String())
+		if tx.To() == nil {
+			// This generally means the tx is contract creation
+			// txHash := tx.Hash().String()
+			txReceipt, txErr := conn.TransactionReceipt(context.Background(), tx.Hash())
+			if txErr != nil {
+				// Tx Error
+				fmt.Printf(txErr.Error())
+			} else {
+				// No errors
+				fmt.Printf(txReceipt.ContractAddress.String())
+				// Found a deployed contract
+			}
+			//fmt.Printf(tx.String())
+			fmt.Printf("\n---\n")
+		}
+	}
+}
+
 func GetAccount(contract string, wallet string) (string, string, string, uint8, string, uint64, error) {
 	var err error
 
@@ -167,6 +202,34 @@ func GetAccount(contract string, wallet string) (string, string, string, uint8, 
 
 	return name, tokenCorrected.String(), symbol, tokenDecimals, ethCorrected.String(), maxBlock, err
 
+}
+
+func GetContractInfo(contract string) (string, string, uint8, error) {
+	var err error
+
+	token, err := NewTokenCaller(common.HexToAddress(contract), conn)
+	if err != nil {
+		log.Println("Failed to instantiate a Token contract: %v", err)
+		return "error", "error", 0, err
+	}
+
+	symbol, err := token.Symbol(nil)
+	if err != nil {
+		log.Println("Failed to get symbol from contract: "+contract, err)
+		return "error", "error", 0, err
+	}
+	tokenDecimals, err := token.Decimals(nil)
+	if err != nil {
+		log.Println("Failed to get decimals from contract: "+contract, err)
+		return "error", "error", 0, err
+	}
+	name, err := token.Name(nil)
+	if err != nil {
+		log.Println("Failed to retrieve token name from contract: "+contract, err)
+		return "error", "error", 0, err
+	}
+
+	return name, symbol, tokenDecimals, err
 }
 
 func round(num float64) int {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 
@@ -139,6 +140,78 @@ func getTokenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type TokenInfo struct {
+	Address string `json:"address"`
+	Symbol  string `json:"symbol"`
+	Decimal int    `json:"decimal"`
+	Type    string `json:"type"`
+	Name    string `json:"name"`
+}
+
+// All eth tokens why not
+func getETHTokensHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	contract := vars["contract"]
+
+	log.Println("Fetching contract:", contract)
+
+	name, symbol, tokenDecimals, err := GetContractInfo(contract)
+
+	// name, balance, token, decimals, ethAmount, block, err := GetAccount(contract, wallet)
+
+	if err != nil {
+		m := ErrorResponse{
+			Error:   true,
+			Message: "could not find contract address",
+		}
+		msg, _ := json.Marshal(m)
+		w.Write(msg)
+		return
+	}
+
+	new := TokenInfo{
+		Address: contract,
+		Decimal: int(tokenDecimals),
+		Symbol:  symbol,
+		Name:    name,
+	}
+
+	j, err := json.Marshal(new)
+
+	if err == nil {
+		w.Write(j)
+	}
+}
+
+type BlockInfo struct {
+	Number uint64 `json:"number"`
+	Data   uint64 `json:"data"`
+}
+
+func getBlockInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// vars := mux.Vars(r)
+	// contract := vars["contract"]
+	blockNumBigInt := new(big.Int)
+	blockNumBigInt.SetInt64(4930986)
+	//blockNumBigInt.
+	blockN, dataInt, err := GetBlockInfo(blockNumBigInt)
+
+	new := BlockInfo{
+		Number: blockN,
+		Data:   dataInt,
+	}
+
+	j, err := json.Marshal(new)
+
+	if err == nil {
+		w.Write(j)
+	}
+}
+
 func StartServer() {
 	log.Println("TokenBalance Server Running: http://" + UseIP + ":" + UsePort)
 	http.Handle("/", Router())
@@ -150,5 +223,7 @@ func Router() *mux.Router {
 	r.HandleFunc("/balance/{contract}/{wallet}", getTokenHandler).Methods("GET")
 	r.HandleFunc("/token/{contract}/{wallet}", getInfoHandler).Methods("GET")
 	r.HandleFunc("/tokens/{wallet}", getAllTokensHandler).Methods("GET")
+	r.HandleFunc("/tokenInfo/{contract}", getETHTokensHandler).Methods("GET")
+	r.HandleFunc("/getBlockInfo", getBlockInfo).Methods("GET")
 	return r
 }
